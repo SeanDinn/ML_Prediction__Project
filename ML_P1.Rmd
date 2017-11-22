@@ -1,0 +1,108 @@
+---
+title: "Prediction of Exercise Effectiveness"
+author: "Sean Dinn"
+date: "November 21, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE)
+```
+
+## Summary
+
+A model was created to predict whether a certain exercise was performed properly. Training data was collected that exemplified the correct and incorrect way to perform bicep curls. A test set was evaluated and  the model was able to classify the performance into 5 categories with 100% accuracy.
+
+## Introduction
+The data analyzed in this report is from the Weight Lifting Exercises Dataset referenced here (Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th Augmented Human (AH) International Conference in cooperation with ACM SIGCHI (Augmented Human'13) . Stuttgart, Germany: ACM SIGCHI, 2013. ). The goal of the experiment was to see if the quality of an exercise routine could be assessed. A dumbbell curl exercise was performed correctly (1 type) and incorrectly (4 types). Sensors from four different locations (arm, forearm, belt and dumbbell) were used to measure a variety of variables. The goal of this report was to analyze this data and develop a predictive model to correctly classify whether this exercise was being done correctly or not.
+
+```{r, echo=FALSE}
+# initial setup items
+rm(list=objects())
+library(caret)
+library(randomForest)
+library(e1071)
+setwd("~/Coursera/Machine_Learning/Project1")
+
+```
+# Data Cleaning
+
+While importing the training and test sets several types of fields first needed to be changed to NA (NA, DIV/0 and blanks). There were many columns that did not contain any information, so they were removed. There were also several columns that contained identification information (name, date, etc). These were not needed to develop the model and were removed. The ground truth classification ("classe") was changed to a factor to allow methods to be generated. The training data was further separated into a training and validation set to allow for multiple testing of models. A summary of the cleaned up training set is presented below. The final training set had 52 predictors.
+
+```{r, echo=T}
+#read in data and convert blanks and divide by 0 fields to NA
+training <- read.csv("pml-training.csv", na.strings=c("NA","#DIV/0!",""))
+testing <- read.csv("pml-testing.csv",na.strings=c("NA","#DIV/0!",""))
+
+#remove columns that conatin NA values
+complete.training <- training[, colSums(is.na(training)) != nrow(training)]
+complete.testing <- testing[, colSums(is.na(testing)) != nrow(testing)]
+
+#remove id info for model
+test.final <- complete.testing[,-c(1:7,60)] 
+
+#match predictors for training and test set
+to.include <- names(test.final)
+train.final <- subset(complete.training, select= c(to.include, "classe"))
+train.final$classe <- as.factor(train.final$classe)
+
+
+#divide training data into training and test for cross validation
+set.seed(99)
+part1 <- createDataPartition(train.final$classe, p=0.75, list=F)
+inTrain <- train.final[part1,]
+inValidation <- train.final[-part1,]
+summary(inTrain)
+
+```
+
+## Model Building and Evaluation
+The training set was first fit to a partition tree model. "Classe" was fit against all the remaining predictors. This first prediction was not very good as accuracy of 50% was achieved for this training set.
+```{r, echo=T}
+fit1 <- train(classe ~ .,data=inTrain, method="rpart")
+CM1 <- confusionMatrix(predict(fit1, inTrain), inTrain$classe)
+CM1
+
+```
+To get a better sense of out-of-sample error, the model was fit against the validation set. This set showed a similar accuracy of 49%.
+
+```{r, echo=T}
+
+CM2 <- confusionMatrix(predict(fit1,inValidation), inValidation$classe)
+CM2
+
+```
+
+A random forest classifier was tried next. A summary of the model is below. The out-of-bag (OOB) prediction error was estimated at 0.48%, indicating a strong model.
+
+``` {r}
+
+fit2 <- randomForest(classe ~ .,data=inTrain)
+fit2
+
+```
+
+This model was applied to the validation set to verify the OOB estimate. A >99% accuracy was achieved indicating a strong model.
+
+```{r}
+
+CM3 <- confusionMatrix(predict(fit2,inValidation), inValidation$classe)
+CM3
+
+```
+
+Finally, the random forest model was applied to the test set. The problem_id variable was added back to the data frame to match up with the results. The prediction results from 20 new cases are presented below. These results were entered into the course quiz
+webpage and a 100% accuracy was achieved.
+
+```{r}
+
+test.final$classe <- predict(fit2, test.final)
+test.final$problem_id <- complete.testing$problem_id
+answer <- subset(test.final, select= c("problem_id", "classe"))
+answer
+
+```
+
+
+
+
